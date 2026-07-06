@@ -33,14 +33,16 @@ def gen_ioc(i):
     lon += random.uniform(-3, 3)
     feed_count = random.randint(1, 4)
     age_hours = random.randint(1, 240)
-    reputation_hit = random.random() < 0.4
-    risk = min(
-        100,
-        feed_count * 20
-        + (30 if age_hours < 24 else 10)
-        + (20 if reputation_hit else 0)
-        + random.randint(0, 15),
-    )
+    reputation_hit = random.random() < 0.3
+
+    # Weighted, continuous-ish scoring so results spread across the range
+    # instead of clustering at the ceiling.
+    feed_score = feed_count * 12               # max 48
+    recency_score = max(0, 20 - (age_hours / 12))  # decays from 20 to 0 over 10 days
+    reputation_score = 18 if reputation_hit else 0
+    noise = random.uniform(0, 10)
+
+    risk = round(min(97, max(8, feed_score + recency_score + reputation_score + noise)))
     return {
         "IOC": f"{random.choice(IOC_TYPES)}-{1000+i}",
         "Type": random.choice(IOC_TYPES),
@@ -100,10 +102,13 @@ with st.expander("How the Risk Score is calculated"):
     st.markdown("""
 | Signal | Contribution |
 |---|---|
-| Number of reporting feeds | up to 80 pts (20 pts per feed) |
-| IOC age (recency) | +30 if seen in last 24h, else +10 |
-| Reputation/blacklist hit | +20 if flagged |
-| Randomized enrichment noise | 0–15 pts |
+| Number of reporting feeds | up to 48 pts (12 pts per feed) |
+| IOC age (recency) | up to 20 pts, decaying linearly over 10 days |
+| Reputation/blacklist hit | +18 if flagged |
+| Randomized enrichment noise | 0–10 pts |
+
+Scores are bounded between 8 and 97 so the triage queue always shows meaningful separation
+between indicators, rather than clustering multiple IOCs at a shared ceiling.
 
 In the production platform, this scoring runs continuously against live feeds (AlienVault OTX,
 MISP, VirusTotal, Abuse.ch, Shodan), with additional enrichment from geolocation/ASN lookups,
